@@ -17,7 +17,7 @@ class ECBUMediaUpload(MediaUpload):
     It wraps a BufferedReader for a whole file, but only allows it to read
     starting at begin_offset until it reaches end_offset.
 
-    read_file: file descriptor, returned from an open statement.
+    file_descriptor: file descriptor, returned from an open statement.
     file_size: the length of the file in bytes.
     begin_index: the beginning index of the file that makes up this upload.
     end_index: the end index of the file that makes up this upload.
@@ -26,8 +26,8 @@ class ECBUMediaUpload(MediaUpload):
         google drive. We want this.
     """
 
-    def __init__(self, file_descriptor: BufferedReader, file_size: int, begin_index: int, end_index: int,
-                 chunk_size: int = 1 * (1024 * 1024), resumable: bool = True):
+    def __init__(self, file_descriptor: BufferedReader, file_size: int, begin_index: int,
+                 end_index: int, chunk_size: int = 1 * (1024 * 1024), resumable: bool = True):
         self._file_descriptor = file_descriptor
         self._mimetype = "application/octet-stream"
         # check if we are within the bounds of the file
