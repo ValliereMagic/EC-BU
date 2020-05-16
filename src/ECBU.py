@@ -36,7 +36,7 @@ def backup_chunked_file_piece(service, file_chunk: ECBUMediaUpload, folder_id: s
     # The chunk has not changed and does not need to be re-uploaded.
     else:
         print("Chunk: " + file_chunk_name + " is already up to date!")
-        return
+        return True
     # beginning back-off duration for if an error occurs and we try to resume
     default_backoff_time: float = 0.5
     backoff_time: float = default_backoff_time
@@ -72,6 +72,7 @@ def backup_chunked_file_piece(service, file_chunk: ECBUMediaUpload, folder_id: s
             print("Chunk upload progress: %d%%." %
                   int(status.progress() * 100))
     print("Upload of Chunk: " + file_chunk_name + " Complete!")
+    return True
 
 
 def find_or_create_backup_folder(service, dest_folder_name: str) -> str:
@@ -122,11 +123,11 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str, file_chun
     if folder_id is None:
         return False
     # Open up the file and start chunking
-    with open(local_file_name, 'rb') as test_file:
+    with open(local_file_name, 'rb') as local_file:
         # Calculate the size of the file to backup
-        test_file.seek(os.SEEK_SET)
-        test_file.seek(0, os.SEEK_END)
-        file_size: int = test_file.tell()
+        local_file.seek(os.SEEK_SET)
+        local_file.seek(0, os.SEEK_END)
+        file_size: int = local_file.tell()
         # Calculate the number of file_chunk_size chunks to separate and upload
         file_chunk_size_MB = (file_chunk_size * (1000 * 1000))
         num_chunk_files: int = math.ceil(file_size / file_chunk_size_MB)
@@ -138,14 +139,28 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str, file_chun
             # If this is the last chunk, and it goes out of bounds,
             # shorten it so that it doesn't
             if end_index >= file_size:
-                end_index = file_size - 1
+                end_index = file_size
             # Create the ECBUMediaUpload object to represent this chunk of the file
             file_chunk = ECBUMediaUpload(
-                test_file, file_size, bytes_uploaded, end_index)
+                local_file, file_size, bytes_uploaded, end_index)
             # Upload this chunk to google drive
-            backup_chunked_file_piece(
-                service, file_chunk, folder_id, dest_folder_name + '.' + str(chunk_num))
-            bytes_uploaded += file_chunk_size_MB
+            status: bool = False
+            while status is False:
+                # Attempt to upload the chunk
+                status = backup_chunked_file_piece(
+                    service, file_chunk, folder_id, dest_folder_name + '.' + str(chunk_num))
+                # If successful continue, otherwise wait for a second and try again.
+                if status:
+                    break
+                print("Upload of this chunk failed in non-resumable way. Re-Attempting the upload "
+                      "in 1 second.")
+                time.sleep(1)
+            # record the number of bytes uploaded
+            # and move the index over one to not re-upload the end index of the
+            # previous chunk as the start index of the next.
+            bytes_uploaded += file_chunk.size()
+        print("Upload of: " + local_file_name + " as " +
+              dest_folder_name + " was successful.")
         return True
 
 
@@ -159,7 +174,7 @@ def main():
     service = build('drive', 'v3', credentials=credentials)
     # Begin backing up the file.
     begin_backup(
-        service, 'test_file', 'TestFile', 5)
+        service, 'Hedgehog Stew-HnyGSl3K-IE.mp4', 'HHS', 5)
 
 
 if __name__ == '__main__':
