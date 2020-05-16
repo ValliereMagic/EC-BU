@@ -12,25 +12,26 @@ class OffsetOutOfBoundsException(ValueError):
 
 
 class ECBUMediaUpload(MediaUpload):
-    def __init__(self, read_file: BufferedReader, file_size: int, begin_index: int, end_index: int,
-                 chunk_size: int = 1 * (1024 * 1024), resumable: bool = True):
-        """
-        This class represents a piece of a file to be uploaded as a file.
-        It wraps a BufferedReader for a whole file, but only allows it to read
-        starting at begin_offset until it reaches end_offset.
+    """
+    This class represents a piece of a file to be uploaded as a file.
+    It wraps a BufferedReader for a whole file, but only allows it to read
+    starting at begin_offset until it reaches end_offset.
 
-        read_file: file descriptor, returned from an open statement.
-        file_size: the length of the file in bytes.
-        begin_index: the beginning index of the file that makes up this upload.
-        end_index: the end index of the file that makes up this upload.
-        chunk size: the amount of the file pulled into memory and uploaded at a time.
-        resumable: whether this upload uses the resumable feature of
-            google drive. We want this.
-        """
-        self._read_file = read_file
+    read_file: file descriptor, returned from an open statement.
+    file_size: the length of the file in bytes.
+    begin_index: the beginning index of the file that makes up this upload.
+    end_index: the end index of the file that makes up this upload.
+    chunk size: the amount of the file pulled into memory and uploaded at a time.
+    resumable: whether this upload uses the resumable feature of
+        google drive. We want this.
+    """
+
+    def __init__(self, file_descriptor: BufferedReader, file_size: int, begin_index: int, end_index: int,
+                 chunk_size: int = 1 * (1024 * 1024), resumable: bool = True):
+        self._file_descriptor = file_descriptor
         self._mimetype = "application/octet-stream"
         # check if we are within the bounds of the file
-        if (begin_index > (file_size - 1) or end_index > (file_size - 1)) \
+        if begin_index > (file_size - 1) or end_index > (file_size - 1) \
                 or begin_index < 0 or end_index < 0:
             raise OffsetOutOfBoundsException(
                 'One of the offsets provided is outside the length of the file.')
@@ -64,12 +65,12 @@ class ECBUMediaUpload(MediaUpload):
         to only go to to end_index
         """
         read_start_index: int = begin + self._begin_index
-        self._read_file.seek(read_start_index)
+        self._file_descriptor.seek(read_start_index)
         # Make sure we don't go out of bounds of our
         # segment of the file
-        if read_start_index + length >= self._end_index:
+        if (read_start_index + length) >= self._end_index:
             length = self._end_index - read_start_index
-        return self._read_file.read(length)
+        return self._file_descriptor.read(length)
 
     def has_stream(self):
         # We don't want it to use this interface. We want it to

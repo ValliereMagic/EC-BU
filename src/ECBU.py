@@ -12,59 +12,11 @@ from google.auth.transport.requests import Request
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
 
-def get_credentials():
-    credentials = None
-    # Check if we have saved credentials
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
-            credentials = pickle.load(token)
-    # Request credentials
-    if not credentials or not credentials.valid:
-        # Credentials require refreshing
-        if credentials and credentials.expired and credentials.refresh_token:
-            credentials.refresh(Request())
-        # Need to request credentials
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            credentials = flow.run_local_server(port=0)
-            # Save the credentials to the token file
-            with open('token.pickle', 'wb') as token:
-                pickle.dump(credentials, token)
-    return credentials
-
-
-def find_or_create_backup_folder(service, dest_folder_name: str) -> str:
-    # Find the upload folder
-    folder_id = None
-    page_token = None
-    while True:
-        response = service.files().list(q="mimeType = 'application/vnd.google-apps.folder' and trashed = false",
-                                        spaces='drive', fields='nextPageToken, files(id, name)',
-                                        pageToken=page_token).execute()
-        # Look through each of the files accessable to this application, and see if there is already a folder
-        # there for backing up this file.
-        for file in response.get('files', []):
-            folder_name: str = file.get('name')
-            file_id: str = file.get('id')
-            # Found a folder to upload this file to
-            # already.
-            if folder_name == dest_folder_name:
-                folder_id = file_id
-        page_token = response.get('nextPageToken', None)
-        if page_token is None:
-            break
-    # Folder doesn't exist, we need to create one
-    if folder_id is None:
-        result = service.files().create(body={
-            'name': dest_folder_name,
-            'mimeType': 'application/vnd.google-apps.folder'
-        }, fields='id').execute()
-        folder_id = result.get('id')
-    return folder_id
-
-
 def hash_ecbu_media_file_upload(file_chunk: ECBUMediaUpload) -> str:
+    """
+    md5 hash the contents of the passed file_chunk, and return
+    it as a hexstring
+    """
     hasher = hashlib.md5()
     # Append each chunk of the file to the hasher
     bytes_hashed: int = 0
@@ -77,16 +29,28 @@ def hash_ecbu_media_file_upload(file_chunk: ECBUMediaUpload) -> str:
     return hasher.hexdigest()
 
 
-# Simple struct returned by check_if_chunk_exists to detect chunk changes
-# (Which need to be uploaded and which don't)
 class ChangedFile:
-    def __init__(self, changed: bool, ident: str, md5hash: str = None):
+    """
+    Simple struct returned by check_if_chunk_exists to detect chunk changes
+    (Which need to be uploaded and which don't)
+    """
+
+    def __init__(self, changed: bool, ident: str):
+        # Boolean value of whether the file has changed
         self.changed = changed
+        # string value of the file id in google drive
         self.ident = ident
-        self.md5hash = md5hash
 
 
 def check_if_chunk_exists_or_changed(service, file_chunk: ECBUMediaUpload, folder_id: str, file_chunk_name: str) -> ChangedFile:
+    """
+    Using the passed google drive service object try to find the chunk with the name file_chunk_name within the folder with id
+    folder_id.
+    If a file with the name passed exists in the backup folder, hash the local version and compare them.
+    If the hashes match, return a ChangedFile showing no changes necessary.
+    If the hashes don't match, return a ChangedFile reflecting that.
+    If the file doesn't exist at all within the backup folder, return a True change, and a None id
+    """
     page_token = None
     while True:
         response = service.files().list(q="mimeType = 'application/octet-stream' and '" + folder_id + "' in parents",
@@ -101,18 +65,29 @@ def check_if_chunk_exists_or_changed(service, file_chunk: ECBUMediaUpload, folde
                 # Check whether this chunk has changed since last time
                 # it was uploaded by comparing the hashes.
                 if md5hash == local_hash:
-                    return ChangedFile(False, file_id)
+                    return ChangedFile(False, None)
                 else:
-                    return ChangedFile(True, file_id, local_hash)
+                    return ChangedFile(True, file_id)
         # Move on to the next page
         page_token = response.get('nextPageToken', None)
+        # No more pages to look through
         if page_token is None:
             break
     # The file was not found, hash it and return
-    return ChangedFile(True, None, hash_ecbu_media_file_upload(file_chunk))
+    return ChangedFile(True, None)
 
 
 def backup_chunked_file_piece(service, file_chunk: ECBUMediaUpload, folder_id: str, file_chunk_name: str):
+    """
+    Using the check_if_chunk_exists function, check whether this file_chunk has already been backed up before
+    If it has, but the hashes don't match becuase the local copy has been modified, update the file in google
+    drive.
+    If it has never been uploaded before, create the new file in google drive with a name of file_chunk_name.
+
+    Upload the file in a resumable manner, in case the network goes down during a backup for a few minutes
+    or hours :/, then the upload can resume; requiring not have to re-upload the pieces of the chunk; this
+    hopefully can save precious bandwidth.
+    """
     print("Beginning upload of chunk: " + file_chunk_name + ".")
     # Check whether this chunk has been uploaded before
     file_status: ChangedFile = check_if_chunk_exists_or_changed(
@@ -151,7 +126,9 @@ def backup_chunked_file_piece(service, file_chunk: ECBUMediaUpload, folder_id: s
                 print("An error occurred. Trying again with exponential backoff. Waiting: " +
                       str(backoff_time) + " seconds.")
                 time.sleep(backoff_time)
-                backoff_time *= 2
+                # Stop waiting for longer and longer times after 2 minutes.
+                if backoff_time < 120:
+                    backoff_time *= 2
                 response = None
                 continue
             else:
@@ -164,6 +141,41 @@ def backup_chunked_file_piece(service, file_chunk: ECBUMediaUpload, folder_id: s
             print("Chunk upload progress: %d%%." %
                   int(status.progress() * 100))
     print("Upload of Chunk: " + file_chunk_name + " Complete!")
+
+
+def find_or_create_backup_folder(service, dest_folder_name: str) -> str:
+    """
+    Using the passed drive service object, either find the folder with dest_folder_name
+    in the root of google drive, or if it isn't there, create it.
+    """
+    folder_id = None
+    page_token = None
+    while True:
+        response = service.files().list(q="mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+                                        spaces='drive', fields='nextPageToken, files(id, name)',
+                                        pageToken=page_token).execute()
+        # Look through each of the files accessable to this application, and see if there is already a folder
+        # there for backing up this file.
+        for file in response.get('files', []):
+            folder_name: str = file.get('name')
+            file_id: str = file.get('id')
+            # Found a folder to upload this file to
+            # already.
+            if folder_name == dest_folder_name:
+                folder_id = file_id
+        # Move on to the next page
+        page_token = response.get('nextPageToken', None)
+        # No more pages to look through
+        if page_token is None:
+            break
+    # Folder doesn't exist, we need to create one
+    if folder_id is None:
+        result = service.files().create(body={
+            'name': dest_folder_name,
+            'mimeType': 'application/vnd.google-apps.folder'
+        }, fields='id').execute()
+        folder_id = result.get('id')
+    return folder_id
 
 
 def begin_backup(service, local_file_name: str, dest_folder_name: str, file_chunk_size: int) -> bool:
@@ -206,16 +218,42 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str, file_chun
         return True
 
 
+def get_credentials():
+    """
+    Load the required credentials to access the google drive API
+    """
+    credentials = None
+    # Check if we have saved credentials
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            credentials = pickle.load(token)
+    # Request credentials
+    if not credentials or not credentials.valid:
+        # Credentials require refreshing
+        if credentials and credentials.expired and credentials.refresh_token:
+            credentials.refresh(Request())
+        # Need to request credentials
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', SCOPES)
+            credentials = flow.run_local_server(port=0)
+            # Save the credentials to the token file
+            with open('token.pickle', 'wb') as token:
+                pickle.dump(credentials, token)
+    return credentials
+
+
 def main():
+    # Acquire required credentials for google drive
     credentials = get_credentials()
-    # Check if None
     if credentials is None:
         print("Unable to acquire credentials")
         return
     # Create the drive service
     service = build('drive', 'v3', credentials=credentials)
+    # Begin backing up the file.
     begin_backup(
-        service, 'test.txt', 'DisInf', 5)
+        service, 'test_file', 'TestFile', 5)
 
 
 if __name__ == '__main__':
