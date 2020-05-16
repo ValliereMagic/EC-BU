@@ -58,8 +58,9 @@ def check_if_chunk_exists_or_changed(service, file_chunk: ECBUMediaUpload,
                 # it was uploaded by comparing the hashes.
                 if md5hash == local_hash:
                     return ChangedFile(False, None)
-                else:
-                    return ChangedFile(True, file_id)
+                # Otherwise the chunk has been changed, and needs to be
+                # re-uploaded.
+                return ChangedFile(True, file_id)
         # Move on to the next page
         page_token = response.get('nextPageToken', None)
         # No more pages to look through
