@@ -44,7 +44,7 @@ def check_if_chunk_exists_or_changed(service, file_chunk: ECBUMediaUpload,
     """
     page_token = None
     while True:
-        response = service.files().list(q="mimeType = 'application/octet-stream' and '" + folder_id + "' in parents",
+        response = service.files().list(q="'" + folder_id + "' in parents and trashed = false",
                                         spaces='drive', fields='nextPageToken, files(id, name, md5Checksum)',
                                         pageToken=page_token).execute()
         for file in response.get('files', []):

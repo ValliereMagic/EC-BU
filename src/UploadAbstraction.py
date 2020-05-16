@@ -31,7 +31,7 @@ class ECBUMediaUpload(MediaUpload):
         self._file_descriptor = file_descriptor
         self._mimetype = "application/octet-stream"
         # check if we are within the bounds of the file
-        if begin_index > (file_size - 1) or end_index > (file_size - 1) \
+        if begin_index > file_size or end_index > file_size \
                 or begin_index < 0 or end_index < 0:
             raise OffsetOutOfBoundsException(
                 'One of the offsets provided is outside the length of the file.')
@@ -51,7 +51,7 @@ class ECBUMediaUpload(MediaUpload):
         return self._mimetype
 
     def size(self):
-        return self._end_index - self._begin_index
+        return (self._end_index - self._begin_index)
 
     def resumable(self):
         return self._resumable
@@ -68,8 +68,8 @@ class ECBUMediaUpload(MediaUpload):
         self._file_descriptor.seek(read_start_index)
         # Make sure we don't go out of bounds of our
         # segment of the file
-        if (read_start_index + length) >= self._end_index:
-            length = self._end_index - read_start_index
+        if (read_start_index + length) > self._end_index:
+            length = (self._end_index - read_start_index)
         return self._file_descriptor.read(length)
 
     def has_stream(self):
