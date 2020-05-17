@@ -2,7 +2,7 @@
 import os.path
 # ECBU Modules
 from Credentials import get_drive_service
-from DriveAccessFuncs import find_or_create_backup_folder, get_chunk_file_ids
+from DriveAccessFuncs import find_or_create_backup_folder, get_chunk_file_information
 # Google API libraries
 from googleapiclient.http import MediaIoBaseDownload
 
@@ -17,8 +17,8 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
         print("Folder does not exist in drive to restore " +
               local_file_name + " from.")
         return False
-    # Get the ids for each of the chunks from google drive
-    chunk_ids: list = get_chunk_file_ids(service, folder_id)
+    # Get the required information for each of the chunks in google drive
+    chunk_information: list = get_chunk_file_information(service, folder_id)
     # Open up the local file
     with open(local_file_name, 'ab+') as local_file:
         # Find out how big the local file is
