@@ -6,9 +6,8 @@ from argparse import ArgumentParser, Namespace
 # ECBU modules
 from UploadAbstraction import ECBUMediaUpload
 from ChunkChanges import ChangedFile, check_if_chunk_exists_or_changed
-from Credentials import get_credentials
+from Credentials import get_drive_service
 # Google API libraries
-from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 
@@ -138,20 +137,21 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str,
         local_file.seek(0, os.SEEK_END)
         file_size: int = local_file.tell()
         # Calculate the number of file_chunk_size chunks to separate and upload
-        file_chunk_size_MB = (file_chunk_size * (1000 * 1000))
-        num_chunk_files: int = math.ceil(file_size / file_chunk_size_MB)
+        file_chunk_size *= (1000 * 1000)
+        num_chunk_files: int = math.ceil(file_size / file_chunk_size)
         # Create a Media upload for each of the separated files and upload each of them
         bytes_uploaded: int = 0
         for chunk_num in range(1, num_chunk_files + 1):
             # Find the end index for the current file chunk
-            end_index: int = bytes_uploaded + file_chunk_size_MB
+            end_index: int = bytes_uploaded + file_chunk_size
             # If this is the last chunk, and it goes out of bounds,
             # shorten it so that it doesn't
             if end_index >= file_size:
                 end_index = file_size
             # Create the ECBUMediaUpload object to represent this chunk of the file
             file_chunk = ECBUMediaUpload(
-                local_file, file_size, bytes_uploaded, end_index, chunk_size=(upload_chunk_size * (1024 * 1024)))
+                local_file, file_size, bytes_uploaded, end_index,
+                chunk_size=(upload_chunk_size * (1024 * 1024)))
             # Upload this chunk to google drive
             status: bool = False
             while status is False:
@@ -210,9 +210,9 @@ def main():
                           help="Folder name in google drive to contain the "
                           "chunks of the backed-up file.")
     arg_parser.add_argument('--google-drive-chunk-size', dest="google_drive_chunk_size",
-                          help="Size of each file chunk split up in the backup folder. (Megabytes)")
+                            help="Size of each file chunk split up in the backup folder. (Megabytes)")
     arg_parser.add_argument('--file-upload-chunk-size', dest="file_upload_chunk_size",
-                          help="Chunk size for resumable uploads to the drive service. (MebiBytes)")
+                            help="Chunk size for resumable uploads to the drive service. (MebiBytes)")
     # Parse the arguments entered by the user
     parsed_args: Namespace = arg_parser.parse_args()
     # Make sure all the required arguments are not None
@@ -220,13 +220,8 @@ def main():
        parsed_args.dest_folder_name is None:
         arg_parser.print_help()
         return
-    # Acquire required credentials for google drive
-    credentials = get_credentials()
-    if credentials is None:
-        print("Unable to acquire credentials.")
-        return
     # Create the drive service
-    service = build('drive', 'v3', credentials=credentials)
+    service = get_drive_service()
     # Begin backing up the file, with the options picked by the user
     google_drive_chunk_error: str = "Error. Google Drive Chunk size must be an integer."
     file_upload_chunk_error: str = "Error. File Upload Chunk size must be an integer."

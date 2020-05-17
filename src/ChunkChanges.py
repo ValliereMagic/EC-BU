@@ -1,4 +1,6 @@
+# STL resources
 import hashlib
+# ECBU modules
 from UploadAbstraction import ECBUMediaUpload
 
 

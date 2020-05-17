@@ -1,5 +1,8 @@
+# STL resources
 import os.path
 import pickle
+# Google API libraries
+from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
@@ -29,3 +32,15 @@ def get_credentials():
             with open('token.pickle', 'wb') as token:
                 pickle.dump(credentials, token)
     return credentials
+
+
+def get_drive_service() -> object or None:
+    """
+    Acquire the required credentials using the function,
+    and build the google drive service resource.
+    """
+    credentials = get_credentials()
+    if credentials is None:
+        print("Error. unable to acquire credentials.")
+        return None
+    return build('drive', 'v3', credentials=credentials)
