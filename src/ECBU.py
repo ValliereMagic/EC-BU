@@ -1,9 +1,13 @@
+# STL resources
 import os.path
 import time
 import math
+from argparse import ArgumentParser, Namespace
+# ECBU modules
 from UploadAbstraction import ECBUMediaUpload
 from ChunkChanges import ChangedFile, check_if_chunk_exists_or_changed
 from Credentials import get_credentials
+# Google API libraries
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -110,12 +114,17 @@ def find_or_create_backup_folder(service, dest_folder_name: str) -> str:
     return folder_id
 
 
-def begin_backup(service, local_file_name: str, dest_folder_name: str, file_chunk_size: int) -> bool:
+def begin_backup(service, local_file_name: str, dest_folder_name: str,
+                 file_chunk_size: int = 1000, upload_chunk_size: int = 1) -> bool:
     """
     service: google drive service
     local_file_name: name of the file on disk
-    dest_folder_name: the name of the folder for this to be stored in on google drive
-    file_chunk_size: the size in MB for each of the chunks in the uploaded folder to be.
+    dest_folder_name: the name of the folder for this to be stored in on
+        google drive
+    file_chunk_size: the size in MB for each of the chunks in the uploaded
+        folder to be.
+    upload_chunk_size: the size in MiB of the resumable upload chunks for
+        uploading the file chunk to google drive.
     """
     # Get or create the parent folder for our chunked backup file
     folder_id: str = find_or_create_backup_folder(service, dest_folder_name)
@@ -142,7 +151,7 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str, file_chun
                 end_index = file_size
             # Create the ECBUMediaUpload object to represent this chunk of the file
             file_chunk = ECBUMediaUpload(
-                local_file, file_size, bytes_uploaded, end_index)
+                local_file, file_size, bytes_uploaded, end_index, chunk_size=(upload_chunk_size * (1024 * 1024)))
             # Upload this chunk to google drive
             status: bool = False
             while status is False:
@@ -164,17 +173,104 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str, file_chun
         return True
 
 
+def parse_integer_argument(int_arg: str, error_str: str) -> int or None:
+    """
+    Parse a user entered integer argument as an integer from a string.
+    If an error occurs, inform the user.
+    """
+    resultant_int: int = None
+    if int_arg:
+        try:
+            resultant_int = int(int_arg)
+            # Make sure the argument isn't out of sensible bounds
+            if resultant_int > 1000 or resultant_int < 0:
+                print("Chunk arguments should be in 0 < chunk_argument <= 1000")
+                return None
+        # Passed argument wasn't a string
+        except ValueError:
+            print(error_str)
+            return None
+    return resultant_int
+
+
 def main():
+    """
+    Grab the CLI arguments passed by the user, and then begin a backup
+    """
+    # Register the argument parser
+    arg_parser: ArgumentParser = ArgumentParser(
+        description="EC-BU ~Exposed Conscious Back-Up~")
+    # Register the two different argument groups
+    required = arg_parser.add_argument_group("required arguments")
+    # Register the options the user can pick through
+    required.add_argument('--file-to-backup', dest="file_to_backup",
+                          help="Local file name to back up in "
+                          "chunks to google drive.")
+    required.add_argument('--dest-folder-name', dest="dest_folder_name",
+                          help="Folder name in google drive to contain the "
+                          "chunks of the backed-up file.")
+    arg_parser.add_argument('--google-drive-chunk-size', dest="google_drive_chunk_size",
+                          help="Size of each file chunk split up in the backup folder. (Megabytes)")
+    arg_parser.add_argument('--file-upload-chunk-size', dest="file_upload_chunk_size",
+                          help="Chunk size for resumable uploads to the drive service. (MebiBytes)")
+    # Parse the arguments entered by the user
+    parsed_args: Namespace = arg_parser.parse_args()
+    # Make sure all the required arguments are not None
+    if parsed_args.file_to_backup is None or \
+       parsed_args.dest_folder_name is None:
+        arg_parser.print_help()
+        return
     # Acquire required credentials for google drive
     credentials = get_credentials()
     if credentials is None:
-        print("Unable to acquire credentials")
+        print("Unable to acquire credentials.")
         return
     # Create the drive service
     service = build('drive', 'v3', credentials=credentials)
-    # Begin backing up the file.
-    begin_backup(
-        service, 'Hedgehog Stew-HnyGSl3K-IE.mp4', 'HHS', 5)
+    # Begin backing up the file, with the options picked by the user
+    google_drive_chunk_error: str = "Error. Google Drive Chunk size must be an integer."
+    file_upload_chunk_error: str = "Error. File Upload Chunk size must be an integer."
+    # Both optional arguments were passed
+    if parsed_args.google_drive_chunk_size and \
+            parsed_args.file_upload_chunk_size:
+        # Try and convert the optional arguments to integers
+        google_drive_chunk_size: int = parse_integer_argument(
+            parsed_args.google_drive_chunk_size, google_drive_chunk_error)
+        file_upload_chunk_size: int = parse_integer_argument(
+            parsed_args.file_upload_chunk_size, file_upload_chunk_error)
+        # None check on integer conversion
+        if google_drive_chunk_size is None or \
+                file_upload_chunk_size is None:
+            return
+        begin_backup(
+            service, parsed_args.file_to_backup, parsed_args.dest_folder_name,
+            google_drive_chunk_size, file_upload_chunk_size)
+    # Only the dest_file_chunk size was passed
+    elif parsed_args.google_drive_chunk_size:
+        # Try and convert the optional argument to an integer
+        google_drive_chunk_size: int = parse_integer_argument(
+            parsed_args.google_drive_chunk_size, google_drive_chunk_error)
+        # None check on integer conversion
+        if google_drive_chunk_size is None:
+            return
+        begin_backup(
+            service, parsed_args.file_to_backup, parsed_args.dest_folder_name,
+            file_chunk_size=google_drive_chunk_size)
+    # Only file upload chunk size was passed
+    elif parsed_args.file_upload_chunk_size:
+        # Try and convert the optional argument to an integer
+        file_upload_chunk_size: int = parse_integer_argument(
+            parsed_args.file_upload_chunk_size, file_upload_chunk_error)
+        # None check on integer conversion
+        if file_upload_chunk_size is None:
+            return
+        begin_backup(
+            service, parsed_args.file_to_backup, parsed_args.dest_folder_name,
+            upload_chunk_size=file_upload_chunk_size)
+    # No optional arguments were passed
+    else:
+        begin_backup(
+            service, parsed_args.file_to_backup, parsed_args.dest_folder_name)
 
 
 if __name__ == '__main__':
