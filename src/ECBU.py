@@ -5,6 +5,7 @@ import math
 from argparse import ArgumentParser, Namespace
 # ECBU modules
 from UploadAbstraction import ECBUMediaUpload
+from DriveAccessFuncs import find_or_create_backup_folder
 from ChunkChanges import ChangedFile, check_if_chunk_exists_or_changed
 from Credentials import get_drive_service
 # Google API libraries
@@ -78,41 +79,6 @@ def backup_chunked_file_piece(service, file_chunk: ECBUMediaUpload, folder_id: s
     return True
 
 
-def find_or_create_backup_folder(service, dest_folder_name: str) -> str:
-    """
-    Using the passed drive service object, either find the folder with dest_folder_name
-    in the root of google drive, or if it isn't there, create it.
-    """
-    folder_id = None
-    page_token = None
-    while True:
-        response = service.files().list(q="mimeType = 'application/vnd.google-apps.folder' and trashed = false",
-                                        spaces='drive', fields='nextPageToken, files(id, name)',
-                                        pageToken=page_token).execute()
-        # Look through each of the files accessable to this application, and see if there is already a folder
-        # there for backing up this file.
-        for file in response.get('files', []):
-            folder_name: str = file.get('name')
-            file_id: str = file.get('id')
-            # Found a folder to upload this file to
-            # already.
-            if folder_name == dest_folder_name:
-                folder_id = file_id
-        # Move on to the next page
-        page_token = response.get('nextPageToken', None)
-        # No more pages to look through
-        if page_token is None:
-            break
-    # Folder doesn't exist, we need to create one
-    if folder_id is None:
-        result = service.files().create(body={
-            'name': dest_folder_name,
-            'mimeType': 'application/vnd.google-apps.folder'
-        }, fields='id').execute()
-        folder_id = result.get('id')
-    return folder_id
-
-
 def begin_backup(service, local_file_name: str, dest_folder_name: str,
                  file_chunk_size: int = 1000, upload_chunk_size: int = 1) -> bool:
     """
@@ -133,7 +99,6 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str,
     # Open up the file and start chunking
     with open(local_file_name, 'rb') as local_file:
         # Calculate the size of the file to backup
-        local_file.seek(os.SEEK_SET)
         local_file.seek(0, os.SEEK_END)
         file_size: int = local_file.tell()
         # Calculate the number of file_chunk_size chunks to separate and upload
