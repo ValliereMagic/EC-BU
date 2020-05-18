@@ -30,7 +30,7 @@ def download_chunk(service, local_file, bytes_downloaded: int,
     while not completed:
         status, completed = chunk_downloader.next_chunk(10)
         if status:
-            print("Downloaded %d%%." %
+            print("Chunk download progress: %d%%." %
                   int(status.progress() * 100))
     print("Download of chunk: " +
           chunk['name'] + " completed!")
