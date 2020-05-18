@@ -88,11 +88,11 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
                 else:
                     print("Chunk: " + chunk['name'] +
                           " is already up to date!")
-                    bytes_downloaded += chunk_size
             # We don't have this chunk yet in our local copy.
             else:
                 download_chunk(service, local_file,
                                bytes_downloaded, download_chunk_size, chunk)
+            bytes_downloaded += chunk_size
     return True
 
 
