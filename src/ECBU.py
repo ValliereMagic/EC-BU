@@ -4,6 +4,7 @@ import time
 import math
 from argparse import ArgumentParser, Namespace
 # ECBU modules
+from CommandLineParse import parse_integer_argument
 from UploadAbstraction import ECBUMediaUpload
 from DriveAccessFuncs import find_or_create_backup_folder
 from ChunkChanges import ChangedFile, check_if_chunk_exists_or_changed
@@ -138,26 +139,6 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str,
         return True
 
 
-def parse_integer_argument(int_arg: str, error_str: str) -> int or None:
-    """
-    Parse a user entered integer argument as an integer from a string.
-    If an error occurs, inform the user.
-    """
-    resultant_int: int = None
-    if int_arg:
-        try:
-            resultant_int = int(int_arg)
-            # Make sure the argument isn't out of sensible bounds
-            if resultant_int > 1000 or resultant_int < 0:
-                print("Chunk arguments should be in 0 < chunk_argument <= 1000")
-                return None
-        # Passed argument wasn't a string
-        except ValueError:
-            print(error_str)
-            return None
-    return resultant_int
-
-
 def main():
     """
     Grab the CLI arguments passed by the user, and then begin a backup
@@ -180,7 +161,7 @@ def main():
                             help="Chunk size for resumable uploads to the drive service. (MebiBytes)")
     # Parse the arguments entered by the user
     parsed_args: Namespace = arg_parser.parse_args()
-    # Make sure all the required arguments are not None
+    # Make sure all the required arguments are there
     if parsed_args.file_to_backup is None or \
        parsed_args.dest_folder_name is None:
         arg_parser.print_help()

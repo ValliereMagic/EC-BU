@@ -87,5 +87,5 @@ def check_if_chunk_exists_or_changed(service, file_chunk: ECBUMediaUpload,
             # Otherwise the chunk has been changed, and needs to be
             # re-uploaded.
             return ChangedFile(True, file_id)
-    # The file was not found, hash it and return
+    # The file was not found
     return ChangedFile(True, None)
