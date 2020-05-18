@@ -71,6 +71,11 @@ def backup_chunked_file_piece(service, file_chunk: ECBUMediaUpload, folder_id: s
                 # Error and quit
                 print("Fatal Error uploading chunk.")
                 return False
+        # Handle the internet connection going out while backing up the file
+        except Exception:
+            print('Connection timed out, attempting again in 10 seconds.')
+            time.sleep(10)
+            continue
         # Reset exponential backoff time amount
         backoff_time = default_backoff_time
         if status:
@@ -128,8 +133,8 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str,
                 if status:
                     break
                 print("Upload of this chunk failed in non-resumable way. Re-Attempting the upload "
-                      "in 1 second.")
-                time.sleep(1)
+                      "in 10 seconds.")
+                time.sleep(10)
             # record the number of bytes uploaded
             # and move the index over one to not re-upload the end index of the
             # previous chunk as the start index of the next.

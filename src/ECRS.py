@@ -1,5 +1,6 @@
 # STL resources
 import os.path
+import time
 from argparse import ArgumentParser, Namespace
 # ECBU Modules
 from Credentials import get_drive_service
@@ -28,10 +29,15 @@ def download_chunk(service, local_file, bytes_downloaded: int,
     # the way.
     completed: bool = False
     while not completed:
-        status, completed = chunk_downloader.next_chunk(10)
-        if status:
-            print("Chunk download progress: %d%%." %
-                  int(status.progress() * 100))
+        try:
+            status, completed = chunk_downloader.next_chunk(10)
+            if status:
+                print("Chunk download progress: %d%%." %
+                      int(status.progress() * 100))
+        except Exception:
+            print('Connection timed out, attempting again in 10 seconds.')
+            time.sleep(10)
+            continue
     print("Download of chunk: " +
           chunk['name'] + " completed!")
 
