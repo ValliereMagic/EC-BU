@@ -1,2 +1,1 @@
-# Google drive python client
--e git://github.com/googleapis/google-api-python-client
+-e git://github.com/googleapis/google-api-python-client#egg=google-api-python-client
