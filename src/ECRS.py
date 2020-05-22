@@ -5,8 +5,7 @@ from argparse import ArgumentParser, Namespace
 # ECBU Modules
 from Credentials import get_drive_service
 from CommandLineParse import parse_integer_argument
-from DriveAccessFuncs import find_or_create_backup_folder, get_chunk_file_information
-from ChunkChanges import check_if_chunk_exists_or_changed, ChangedFile
+from DriveAccess import ChangedFile, find_or_create_backup_folder, DriveChunks
 from UploadAbstraction import ECBUMediaUpload
 # Google API libraries
 from googleapiclient.http import MediaIoBaseDownload
@@ -16,7 +15,7 @@ def download_chunk(service, local_file, bytes_downloaded: int,
                    download_chunk_size: int, chunk: dict):
     """
     Using the drive service, download the passed chunk by id
-    bytes_downloaded bytes into the file.
+    at index bytes_downloaded bytes into the file.
     """
     # Seek to the spot to put the chunk
     local_file.seek(bytes_downloaded)
@@ -60,9 +59,11 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
         print("Folder does not exist in drive to restore " +
               local_file_name + " from.")
         return False
+    # Create the DriveChunks Object
+    drive_chunks: DriveChunks = DriveChunks(service, folder_id)
     # Get the required information for each of the chunks in google drive
     # Dictionary containing the id, name, and size of each chunk
-    chunk_information: list = get_chunk_file_information(service, folder_id)
+    chunk_information: list = drive_chunks.get_chunk_file_information()
     if not chunk_information:
         return False
     # Open up the local file
@@ -79,8 +80,8 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
                 # Check if the chunk has been changed
                 chunk_representation: ECBUMediaUpload = ECBUMediaUpload(
                     local_file, file_size, bytes_downloaded, bytes_downloaded + chunk_size)
-                result: ChangedFile = check_if_chunk_exists_or_changed(
-                    service, chunk_representation, folder_id, chunk['name'])
+                result: ChangedFile = drive_chunks.check_if_chunk_exists_or_changed(
+                    chunk_representation, chunk['name'])
                 # The chunk has been changed and needs to be re-downloaded in this spot.
                 if result.changed and result.ident:
                     download_chunk(service, local_file,
@@ -99,6 +100,8 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
                 download_chunk(service, local_file,
                                bytes_downloaded, download_chunk_size, chunk)
             bytes_downloaded += chunk_size
+    print("Restore of: " + local_file_name + " from " +
+          backup_folder_name + " was successful.")
     return True
 
 
