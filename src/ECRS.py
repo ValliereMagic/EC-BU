@@ -12,7 +12,8 @@ from googleapiclient.http import MediaIoBaseDownload
 
 
 def download_chunk(service, local_file, bytes_downloaded: int,
-                   download_chunk_size: int, chunk: dict):
+                   download_chunk_size: int, chunk: dict,
+                   chunk_num: int, num_chunks: int):
     """
     Using the drive service, download the passed chunk by id
     at index bytes_downloaded bytes into the file.
@@ -20,7 +21,8 @@ def download_chunk(service, local_file, bytes_downloaded: int,
     # Seek to the spot to put the chunk
     local_file.seek(bytes_downloaded)
     # Download the chunk at this spot
-    print("Beginning download of chunk: " + chunk['name'] + ".")
+    print("Beginning download of chunk: " + chunk['name'] +
+          " Chunk: " + str(chunk_num) + " Out of: " + str(num_chunks) + ".")
     request = service.files().get_media(fileId=chunk['id'])
     chunk_downloader = MediaIoBaseDownload(
         local_file, request, download_chunk_size * (1024 * 1024))
@@ -73,6 +75,10 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
         # Go through each chunk, tallying how many bytes we already have
         # as we go.
         bytes_downloaded: int = 0
+        # Calculate the number of chunks to restore:
+        num_chunks: int = len(chunk_information)
+        # Count the chunks as we go to report status to the user
+        chunk_num: int = 1
         for chunk in chunk_information:
             chunk_size: int = int(chunk['size'])
             # Check if we already downloaded this chunk
@@ -85,7 +91,8 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
                 # The chunk has been changed and needs to be re-downloaded in this spot.
                 if result.changed and result.ident:
                     download_chunk(service, local_file,
-                                   bytes_downloaded, download_chunk_size, chunk)
+                                   bytes_downloaded, download_chunk_size, chunk,
+                                   chunk_num, num_chunks)
                 # The chunk somehow doesn't exist. Fatal error. Exit.
                 elif result.changed and not result.ident:
                     print("Error. Chunk: " +
@@ -98,8 +105,11 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
             # We don't have this chunk yet in our local copy.
             else:
                 download_chunk(service, local_file,
-                               bytes_downloaded, download_chunk_size, chunk)
+                               bytes_downloaded, download_chunk_size, chunk,
+                               chunk_num, num_chunks)
+            # Increment loop counters
             bytes_downloaded += chunk_size
+            chunk_num += 1
     print("Restore of: " + local_file_name + " from " +
           backup_folder_name + " was successful.")
     return True

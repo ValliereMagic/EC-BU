@@ -13,7 +13,7 @@ from googleapiclient.errors import HttpError
 
 
 def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_chunk: ECBUMediaUpload,
-                              file_chunk_name: str):
+                              file_chunk_name: str, chunk_num: int, num_chunks: int):
     """
     Using the check_if_chunk_exists function, check whether this file_chunk has already been backed up before
     If it has, but the hashes don't match becuase the local copy has been modified, update the file in google
@@ -24,7 +24,8 @@ def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_c
     or hours :/, then the upload can resume; requiring not have to re-upload the pieces of the chunk; this
     hopefully can save precious bandwidth.
     """
-    print("Beginning upload of chunk: " + file_chunk_name + ".")
+    print("Beginning upload of chunk: " + file_chunk_name +
+          " Chunk: " + str(chunk_num) + " Out of: " + str(num_chunks) + ".")
     # Check whether this chunk has been uploaded before
     file_status: ChangedFile = drive_chunks.check_if_chunk_exists_or_changed(
         file_chunk, file_chunk_name)
@@ -130,7 +131,8 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str,
             while status is False:
                 # Attempt to upload the chunk
                 status = backup_chunked_file_piece(
-                    service, drive_chunks, file_chunk, dest_folder_name + '.' + str(chunk_num))
+                    service, drive_chunks, file_chunk, dest_folder_name +
+                    '.' + str(chunk_num), chunk_num, num_chunk_files)
                 # If successful continue, otherwise wait for a second and try again.
                 if status:
                     break
