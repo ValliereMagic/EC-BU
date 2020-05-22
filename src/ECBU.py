@@ -86,7 +86,7 @@ def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_c
 
 
 def begin_backup(service, local_file_name: str, dest_folder_name: str,
-                 file_chunk_size: int = 1000, upload_chunk_size: int = 1) -> bool:
+                 file_chunk_size: int = 250, upload_chunk_size: int = 1) -> bool:
     """
     service: google drive service
     local_file_name: name of the file on disk
