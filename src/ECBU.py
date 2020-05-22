@@ -6,14 +6,14 @@ from argparse import ArgumentParser, Namespace
 # ECBU modules
 from CommandLineParse import parse_integer_argument
 from UploadAbstraction import ECBUMediaUpload
-from DriveAccessFuncs import find_or_create_backup_folder
-from ChunkChanges import ChangedFile, check_if_chunk_exists_or_changed
+from DriveAccess import ChangedFile, DriveChunks, find_or_create_backup_folder
 from Credentials import get_drive_service
 # Google API libraries
 from googleapiclient.errors import HttpError
 
 
-def backup_chunked_file_piece(service, file_chunk: ECBUMediaUpload, folder_id: str, file_chunk_name: str):
+def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_chunk: ECBUMediaUpload,
+                              file_chunk_name: str):
     """
     Using the check_if_chunk_exists function, check whether this file_chunk has already been backed up before
     If it has, but the hashes don't match becuase the local copy has been modified, update the file in google
@@ -26,14 +26,14 @@ def backup_chunked_file_piece(service, file_chunk: ECBUMediaUpload, folder_id: s
     """
     print("Beginning upload of chunk: " + file_chunk_name + ".")
     # Check whether this chunk has been uploaded before
-    file_status: ChangedFile = check_if_chunk_exists_or_changed(
-        service, file_chunk, folder_id, file_chunk_name)
+    file_status: ChangedFile = drive_chunks.check_if_chunk_exists_or_changed(
+        file_chunk, file_chunk_name)
     # Upload the file_chunk to google drive
     request = None
     # Chunk has never been uploaded before
     if file_status.changed and not file_status.ident:
         request = service.files().create(
-            media_body=file_chunk, body={'name': file_chunk_name, 'parents': [folder_id]})
+            media_body=file_chunk, body={'name': file_chunk_name, 'parents': [drive_chunks.folder_id]})
     # Chunk has been uploaded before but it has been changed
     elif file_status.changed and file_status.ident:
         request = service.files().update(
@@ -99,6 +99,8 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str,
     """
     # Get or create the parent folder for our chunked backup file
     folder_id: str = find_or_create_backup_folder(service, dest_folder_name)
+    # Create the DriveChunks Object
+    drive_chunks: DriveChunks = DriveChunks(service, folder_id)
     # Unable to find or make a folder to back up the file to
     if folder_id is None:
         return False
@@ -128,7 +130,7 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str,
             while status is False:
                 # Attempt to upload the chunk
                 status = backup_chunked_file_piece(
-                    service, file_chunk, folder_id, dest_folder_name + '.' + str(chunk_num))
+                    service, drive_chunks, file_chunk, dest_folder_name + '.' + str(chunk_num))
                 # If successful continue, otherwise wait for a second and try again.
                 if status:
                     break
