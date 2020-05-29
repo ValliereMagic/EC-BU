@@ -7,13 +7,13 @@ from Credentials import get_drive_service
 from CommandLineParse import parse_integer_argument
 from DriveAccess import ChangedFile, find_or_create_backup_folder, DriveChunks
 from UploadAbstraction import ECBUMediaUpload
+from ErrorWaiting import IncreasingBackoff
 # Google API libraries
 from googleapiclient.http import MediaIoBaseDownload
 
 
 def download_chunk(service, local_file, bytes_downloaded: int,
-                   download_chunk_size: int, chunk: dict,
-                   chunk_num: int, num_chunks: int):
+                   download_chunk_size: int, chunk: dict):
     """
     Using the drive service, download the passed chunk by id
     at index bytes_downloaded bytes into the file.
@@ -21,11 +21,11 @@ def download_chunk(service, local_file, bytes_downloaded: int,
     # Seek to the spot to put the chunk
     local_file.seek(bytes_downloaded)
     # Download the chunk at this spot
-    print("Beginning download of chunk: " + chunk['name'] +
-          " Chunk: " + str(chunk_num) + " Out of: " + str(num_chunks) + ".")
     request = service.files().get_media(fileId=chunk['id'])
     chunk_downloader = MediaIoBaseDownload(
         local_file, request, download_chunk_size * (1024 * 1024))
+    # Backoff object for wait times when errors occur
+    backoff: IncreasingBackoff = IncreasingBackoff(0.5, 10 * (60), 2)
     # Download each chunk of the chunk, reporting progress along
     # the way.
     completed: bool = False
@@ -36,8 +36,9 @@ def download_chunk(service, local_file, bytes_downloaded: int,
                 print("Chunk download progress: %d%%." %
                       int(status.progress() * 100))
         except Exception:
-            print('Connection timed out, attempting again in 10 seconds.')
-            time.sleep(10)
+            print('Connection timed out, attempting again in ' +
+                  str(backoff.wait_time) + ' seconds.')
+            backoff.wait()
             continue
     print("Download of chunk: " +
           chunk['name'] + " completed!")
@@ -81,6 +82,9 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
         chunk_num: int = 1
         for chunk in chunk_information:
             chunk_size: int = int(chunk['size'])
+            # Alert the user that we are beginning operations on this chunk
+            print("Beginning download of chunk: " + chunk['name'] +
+                  " Chunk: " + str(chunk_num) + " Out of: " + str(num_chunks) + ".")
             # Check if we already downloaded this chunk
             if file_size >= (chunk_size + bytes_downloaded):
                 # Check if the chunk has been changed
@@ -91,8 +95,7 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
                 # The chunk has been changed and needs to be re-downloaded in this spot.
                 if result.changed and result.ident:
                     download_chunk(service, local_file,
-                                   bytes_downloaded, download_chunk_size, chunk,
-                                   chunk_num, num_chunks)
+                                   bytes_downloaded, download_chunk_size, chunk)
                 # The chunk somehow doesn't exist. Fatal error. Exit.
                 elif result.changed and not result.ident:
                     print("Error. Chunk: " +
@@ -105,8 +108,7 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
             # We don't have this chunk yet in our local copy.
             else:
                 download_chunk(service, local_file,
-                               bytes_downloaded, download_chunk_size, chunk,
-                               chunk_num, num_chunks)
+                               bytes_downloaded, download_chunk_size, chunk)
             # Increment loop counters
             bytes_downloaded += chunk_size
             chunk_num += 1

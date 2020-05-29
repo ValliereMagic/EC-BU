@@ -8,6 +8,7 @@ from CommandLineParse import parse_integer_argument
 from UploadAbstraction import ECBUMediaUpload
 from DriveAccess import ChangedFile, DriveChunks, find_or_create_backup_folder
 from Credentials import get_drive_service
+from ErrorWaiting import IncreasingBackoff
 # Google API libraries
 from googleapiclient.errors import HttpError
 
@@ -44,8 +45,7 @@ def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_c
         print("Chunk: " + file_chunk_name + " is already up to date!")
         return True
     # beginning back-off duration for if an error occurs and we try to resume
-    default_backoff_time: float = 0.5
-    backoff_time: float = default_backoff_time
+    backoff: IncreasingBackoff = IncreasingBackoff(0.5, 10 * (60), 2)
     response = None
     while response is None:
         # Attempt to upload a chunk of the file
@@ -54,18 +54,11 @@ def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_c
         # Catch any errors that occur, attempting to continue
         # uploading if possible
         except HttpError as e:
-            if e.resp.status in [404]:
-                # Restart upload
-                print("Error 404. Must restart upload.")
-                return False
-            elif e.resp.status in [500, 502, 503, 504]:
-                # Call next chunk again, using exponential backoff
-                print("An error occurred. Trying again with exponential backoff. Waiting: " +
-                      str(backoff_time) + " seconds.")
-                time.sleep(backoff_time)
-                # Stop waiting for longer and longer times after 2 minutes.
-                if backoff_time < 120:
-                    backoff_time *= 2
+            if e.resp.status in [500, 502, 503, 504]:
+                # Call next chunk again, using increasing backoff
+                print("An error occurred. Trying again with increasing backoff. Waiting: " +
+                      str(backoff.wait_time) + " seconds.")
+                backoff.wait()
                 response = None
                 continue
             else:
@@ -74,11 +67,12 @@ def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_c
                 return False
         # Handle the internet connection going out while backing up the file
         except Exception:
-            print('Connection timed out, attempting again in 10 seconds.')
-            time.sleep(10)
+            print('Connection timed out, attempting again in ' +
+                  str(backoff.wait_time) + ' seconds.')
+            backoff.wait()
             continue
-        # Reset exponential backoff time amount
-        backoff_time = default_backoff_time
+        # Reset increasing backoff time amount
+        backoff.reset_to_initial()
         if status:
             print("Chunk upload progress: %d%%." %
                   int(status.progress() * 100))
@@ -126,6 +120,8 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str,
             file_chunk = ECBUMediaUpload(
                 local_file, file_size, bytes_uploaded, end_index,
                 chunk_size=(upload_chunk_size * (1024 * 1024)))
+            # Initialize the IncreasingBackoff retry object, incase something goes wrong
+            backoff: IncreasingBackoff = IncreasingBackoff(0.5, 10 * (60), 2)
             # Upload this chunk to google drive
             status: bool = False
             while status is False:
@@ -133,12 +129,13 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str,
                 status = backup_chunked_file_piece(
                     service, drive_chunks, file_chunk, dest_folder_name +
                     '.' + str(chunk_num), chunk_num, num_chunk_files)
-                # If successful continue, otherwise wait for a second and try again.
+                # If successful continue, otherwise wait and try again.
                 if status:
+                    backoff.reset_to_initial()
                     break
-                print("Upload of this chunk failed in non-resumable way. Re-Attempting the upload "
-                      "in 10 seconds.")
-                time.sleep(10)
+                print("Upload of this chunk failed in a non-resumable way. Re-attempting the upload "
+                      "in " + str(backoff.wait_time) + " seconds.")
+                backoff.wait()
             # record the number of bytes uploaded
             # and move the index over one to not re-upload the end index of the
             # previous chunk as the start index of the next.
