@@ -1,5 +1,6 @@
 # STL resources
 import re
+import time
 # ECBU modules
 from UploadAbstraction import ECBUMediaUpload
 from ChunkChanges import hash_ecbu_media_file_upload
@@ -64,6 +65,9 @@ class DriveChunks(object):
             # No more pages to look through
             if page_token is None:
                 break
+            # Sleep for 90ms to make sure our request does not exceed the google drive
+            # limit of 1000 requests per 100 seconds per user
+            time.sleep(0.09)
         # Sort the chunk_information so that we restore the folder in the correct order
         self._chunk_changes_cache.sort(key=self._chunk_id_response_compare)
 
