@@ -1,6 +1,7 @@
 # STL resources
-from io import BufferedReader
 import os
+from io import BufferedReader
+
 # Google API libraries
 from googleapiclient.http import MediaUpload
 

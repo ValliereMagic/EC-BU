@@ -1,10 +1,11 @@
 # STL resources
 import os.path
 import pickle
+
 # Google API libraries
-from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 

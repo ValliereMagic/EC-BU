@@ -1,9 +1,10 @@
 # STL resources
 import re
 import time
+
 # ECBU modules
-from UploadAbstraction import ECBUMediaUpload
 from ChunkChanges import hash_ecbu_media_file_upload
+from UploadAbstraction import ECBUMediaUpload
 
 
 class ChangedFile:
@@ -12,11 +13,11 @@ class ChangedFile:
     (Which need to be uploaded and which don't)
     """
 
-    def __init__(self, changed: bool, ident: str):
+    def __init__(self, changed: bool, file_id: str):
         # Boolean value of whether the file has changed
         self.changed = changed
         # string value of the file id in google drive
-        self.ident = ident
+        self.file_id = file_id
 
 
 class DriveChunks(object):
@@ -54,7 +55,7 @@ class DriveChunks(object):
         self._chunk_changes_cache = list()
         page_token = None
         while True:
-            response = self._service.files().list(q="'" + self.folder_id + "' in parents and trashed = false",
+            response = self._service.files().list(q="'{}' in parents and trashed = false".format(self.folder_id),
                                                   spaces='drive',
                                                   fields='nextPageToken, files(id, name, size, md5Checksum)',
                                                   pageToken=page_token).execute()
