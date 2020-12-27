@@ -1,16 +1,18 @@
 # STL resources
+import math
 import os.path
 import time
-import math
 from argparse import ArgumentParser, Namespace
-# ECBU modules
-from CommandLineParse import parse_integer_argument
-from UploadAbstraction import ECBUMediaUpload
-from DriveAccess import ChangedFile, DriveChunks, find_or_create_backup_folder
-from Credentials import get_drive_service
-from ErrorWaiting import IncreasingBackoff
+
 # Google API libraries
 from googleapiclient.errors import HttpError
+
+# ECBU modules
+from CommandLineParse import parse_integer_argument
+from Credentials import get_drive_service
+from DriveAccess import ChangedFile, DriveChunks, find_or_create_backup_folder
+from ErrorWaiting import IncreasingBackoff
+from UploadAbstraction import ECBUMediaUpload
 
 
 def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_chunk: ECBUMediaUpload,
@@ -25,24 +27,24 @@ def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_c
     or hours :/, then the upload can resume; requiring not have to re-upload the pieces of the chunk; this
     hopefully can save precious bandwidth.
     """
-    print("Beginning upload of chunk: " + file_chunk_name +
-          " Chunk: " + str(chunk_num) + " Out of: " + str(num_chunks) + ".")
+    print("Beginning upload of chunk: {}, Chunk: {} Out of: {}.".format(
+        file_chunk_name, chunk_num, num_chunks))
     # Check whether this chunk has been uploaded before
     file_status: ChangedFile = drive_chunks.check_if_chunk_exists_or_changed(
         file_chunk, file_chunk_name)
     # Upload the file_chunk to google drive
     request = None
     # Chunk has never been uploaded before
-    if file_status.changed and not file_status.ident:
+    if file_status.changed and not file_status.file_id:
         request = service.files().create(
             media_body=file_chunk, body={'name': file_chunk_name, 'parents': [drive_chunks.folder_id]})
     # Chunk has been uploaded before but it has been changed
-    elif file_status.changed and file_status.ident:
+    elif file_status.changed and file_status.file_id:
         request = service.files().update(
-            media_body=file_chunk, fileId=file_status.ident)
+            media_body=file_chunk, fileId=file_status.file_id)
     # The chunk has not changed and does not need to be re-uploaded.
     else:
-        print("Chunk: " + file_chunk_name + " is already up to date!")
+        print("Chunk: {} is already up to date!".format(file_chunk_name))
         return True
     # beginning back-off duration for if an error occurs and we try to resume
     backoff: IncreasingBackoff = IncreasingBackoff(0.5, 10 * (60), 2)
@@ -56,8 +58,8 @@ def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_c
         except HttpError as e:
             if e.resp.status in [500, 502, 503, 504]:
                 # Call next chunk again, using increasing backoff
-                print("An error occurred. Trying again with increasing backoff. Waiting: " +
-                      str(backoff.wait_time) + " seconds.")
+                print("An error occurred. Trying again with increasing backoff."
+                      " Waiting: {} seconds.".format(backoff.wait_time))
                 backoff.wait()
                 response = None
                 continue
@@ -67,16 +69,16 @@ def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_c
                 return False
         # Handle the internet connection going out while backing up the file
         except Exception:
-            print('Connection timed out, attempting again in ' +
-                  str(backoff.wait_time) + ' seconds.')
+            print('Connection timed out, attempting again in {} seconds.'.format(
+                backoff.wait_time))
             backoff.wait()
             continue
         # Reset increasing backoff time amount
         backoff.reset_to_initial()
         if status:
-            print("Chunk upload progress: %d%%." %
-                  int(status.progress() * 100))
-    print("Upload of Chunk: " + file_chunk_name + " Complete!")
+            print("Chunk upload progress: {}%.".format(
+                int(status.progress() * 100)))
+    print("Upload of Chunk: {} Complete!".format(file_chunk_name))
     return True
 
 
@@ -134,14 +136,14 @@ def begin_backup(service, local_file_name: str, dest_folder_name: str,
                     backoff.reset_to_initial()
                     break
                 print("Upload of this chunk failed in a non-resumable way. Re-attempting the upload "
-                      "in " + str(backoff.wait_time) + " seconds.")
+                      "in {} seconds.".format(backoff.wait_time))
                 backoff.wait()
             # record the number of bytes uploaded
             # and move the index over one to not re-upload the end index of the
             # previous chunk as the start index of the next.
             bytes_uploaded += file_chunk.size()
-        print("Upload of: " + local_file_name + " as " +
-              dest_folder_name + " was successful.")
+        print("Upload of: {} as {} was successful.".format(
+            local_file_name, dest_folder_name))
         return True
 
 

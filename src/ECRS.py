@@ -2,14 +2,16 @@
 import os.path
 import time
 from argparse import ArgumentParser, Namespace
-# ECBU Modules
-from Credentials import get_drive_service
-from CommandLineParse import parse_integer_argument
-from DriveAccess import ChangedFile, find_or_create_backup_folder, DriveChunks
-from UploadAbstraction import ECBUMediaUpload
-from ErrorWaiting import IncreasingBackoff
+
 # Google API libraries
 from googleapiclient.http import MediaIoBaseDownload
+
+# ECBU Modules
+from CommandLineParse import parse_integer_argument
+from Credentials import get_drive_service
+from DriveAccess import ChangedFile, DriveChunks, find_or_create_backup_folder
+from ErrorWaiting import IncreasingBackoff
+from UploadAbstraction import ECBUMediaUpload
 
 
 def download_chunk(service, local_file, bytes_downloaded: int,
@@ -33,15 +35,14 @@ def download_chunk(service, local_file, bytes_downloaded: int,
         try:
             status, completed = chunk_downloader.next_chunk(10)
             if status:
-                print("Chunk download progress: %d%%." %
-                      int(status.progress() * 100))
+                print("Chunk download progress: {}%.".format(
+                    int(status.progress() * 100)))
         except Exception:
-            print('Connection timed out, attempting again in ' +
-                  str(backoff.wait_time) + ' seconds.')
+            print("Connection timed out, attempting again in {} seconds.".format(
+                backoff.wait_time))
             backoff.wait()
             continue
-    print("Download of chunk: " +
-          chunk['name'] + " completed!")
+    print("Download of chunk: {} completed!".format(chunk['name']))
 
 
 def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
@@ -59,8 +60,8 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
         service, backup_folder_name, False)
     # Make sure that the folder to restore from exists
     if folder_id is None:
-        print("Folder does not exist in drive to restore " +
-              local_file_name + " from.")
+        print("Folder does not exist in drive to restore {} from.".format(
+            local_file_name))
         return False
     # Create the DriveChunks Object
     drive_chunks: DriveChunks = DriveChunks(service, folder_id)
@@ -83,8 +84,8 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
         for chunk in chunk_information:
             chunk_size: int = int(chunk['size'])
             # Alert the user that we are beginning operations on this chunk
-            print("Beginning download of chunk: " + chunk['name'] +
-                  " Chunk: " + str(chunk_num) + " Out of: " + str(num_chunks) + ".")
+            print("Beginning download of chunk: {}, Chunk: {} Out of: {}.".format(
+                chunk['name'], chunk_num, num_chunks))
             # Check if we already downloaded this chunk
             if file_size >= (chunk_size + bytes_downloaded):
                 # Check if the chunk has been changed
@@ -93,18 +94,18 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
                 result: ChangedFile = drive_chunks.check_if_chunk_exists_or_changed(
                     chunk_representation, chunk['name'])
                 # The chunk has been changed and needs to be re-downloaded in this spot.
-                if result.changed and result.ident:
+                if result.changed and result.file_id:
                     download_chunk(service, local_file,
                                    bytes_downloaded, download_chunk_size, chunk)
                 # The chunk somehow doesn't exist. Fatal error. Exit.
-                elif result.changed and not result.ident:
-                    print("Error. Chunk: " +
-                          chunk['name' + " somehow doesn't exist in backup."])
+                elif result.changed and not result.file_id:
+                    print("Error. Chunk: {} somehow doesn't exist in backup.".format(
+                        chunk['name']))
                     return False
                 # The chunk is the same, and doesn't need to be re-downloaded.
                 else:
-                    print("Chunk: " + chunk['name'] +
-                          " is already up to date!")
+                    print("Chunk: {} is already up to date!".format(
+                        chunk['name']))
             # We don't have this chunk yet in our local copy.
             else:
                 download_chunk(service, local_file,
@@ -112,8 +113,8 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
             # Increment loop counters
             bytes_downloaded += chunk_size
             chunk_num += 1
-    print("Restore of: " + local_file_name + " from " +
-          backup_folder_name + " was successful.")
+    print("Restore of: {} from {} was successful.".format(
+        local_file_name, backup_folder_name))
     return True
 
 
