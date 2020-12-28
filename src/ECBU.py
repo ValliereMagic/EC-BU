@@ -65,7 +65,7 @@ def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_c
                 continue
             else:
                 # Error and quit
-                print("Fatal Error uploading chunk.")
+                print("Fatal Error {} while uploading chunk.".format(e.resp.status))
                 return False
         # Handle the internet connection going out while backing up the file
         except Exception:

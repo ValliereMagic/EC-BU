@@ -4,6 +4,7 @@ import time
 from argparse import ArgumentParser, Namespace
 
 # Google API libraries
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
 
 # ECBU Modules
@@ -37,12 +38,45 @@ def download_chunk(service, local_file, bytes_downloaded: int,
             if status:
                 print("Chunk download progress: {}%.".format(
                     int(status.progress() * 100)))
+        except HttpError as e:
+            if e.resp.status in [500, 502, 503, 504]:
+                print("Connection timed out, attempting again in {} seconds.".format(
+                    backoff.wait_time))
+                backoff.wait()
+                continue
+            else:
+                # Error and quit
+                print("Fatal Error: {} while downloading chunk.".format(e.resp.status))
+                return False
+        # Handle the internet connection going out while backing up the file
         except Exception:
-            print("Connection timed out, attempting again in {} seconds.".format(
+            print('Connection timed out, attempting again in {} seconds.'.format(
                 backoff.wait_time))
             backoff.wait()
             continue
+
     print("Download of chunk: {} completed!".format(chunk['name']))
+    return True
+
+
+def continuous_chunk_dl_retry(service, local_file, bytes_downloaded: int,
+                              download_chunk_size: int, chunk: dict):
+    # Initialize the IncreasingBackoff retry object, incase something goes wrong
+    backoff: IncreasingBackoff = IncreasingBackoff(0.5, 10 * (60), 2)
+    # Download this chunk to google drive
+    status: bool = False
+    while status is False:
+        # Attempt to download the chunk
+        status = download_chunk(service, local_file,
+                                bytes_downloaded,
+                                download_chunk_size, chunk)
+        # If successful continue, otherwise wait and try again.
+        if status:
+            backoff.reset_to_initial()
+            break
+        print("Download of this chunk failed in a non-resumable way. Re-attempting the upload "
+              "in {} seconds.".format(backoff.wait_time))
+        backoff.wait()
 
 
 def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
@@ -96,8 +130,9 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
                     chunk_representation, chunk['name'])
                 # The chunk has been changed and needs to be re-downloaded in this spot.
                 if result.changed and result.file_id:
-                    download_chunk(service, local_file,
-                                   bytes_downloaded, download_chunk_size, chunk)
+                    continuous_chunk_dl_retry(service, local_file,
+                                              bytes_downloaded, download_chunk_size,
+                                              chunk)
                 # The chunk somehow doesn't exist. Fatal error. Exit.
                 elif result.changed and not result.file_id:
                     print("Error. Chunk: {} somehow doesn't exist in backup.".format(
@@ -109,8 +144,9 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
                         chunk['name']))
             # We don't have this chunk yet in our local copy.
             else:
-                download_chunk(service, local_file,
-                               bytes_downloaded, download_chunk_size, chunk)
+                continuous_chunk_dl_retry(service, local_file,
+                                          bytes_downloaded, download_chunk_size,
+                                          chunk)
             # Increment loop counters
             bytes_downloaded += chunk_size
             chunk_num += 1
