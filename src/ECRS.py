@@ -71,6 +71,10 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
     if not chunk_information:
         return False
     # Open up the local file
+    # FIXME
+    # THIS IS BROKEN IN PYTHON...
+    # CANNOT SEEK TO THE BEGINNING OF FILE, AND UPDATE CHANGES
+    # ab+ ENFORCES THAT WE WRITE TO THE END OF THE FILE
     with open(local_file_name, 'ab+') as local_file:
         # Find out how big the local file is
         file_size: int = local_file.tell()
