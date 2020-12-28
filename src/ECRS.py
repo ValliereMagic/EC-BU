@@ -16,7 +16,7 @@ from UploadAbstraction import ECBUMediaUpload
 
 
 def download_chunk(service, local_file, bytes_downloaded: int,
-                   download_chunk_size: int, chunk: dict):
+                   download_chunk_size: int, chunk: dict) -> bool:
     """
     Using the drive service, download the passed chunk by id
     at index bytes_downloaded bytes into the file.

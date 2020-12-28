@@ -16,7 +16,7 @@ from UploadAbstraction import ECBUMediaUpload
 
 
 def backup_chunked_file_piece(service: object, drive_chunks: DriveChunks, file_chunk: ECBUMediaUpload,
-                              file_chunk_name: str, chunk_num: int, num_chunks: int):
+                              file_chunk_name: str, chunk_num: int, num_chunks: int) -> bool:
     """
     Using the check_if_chunk_exists function, check whether this file_chunk has already been backed up before
     If it has, but the hashes don't match becuase the local copy has been modified, update the file in google

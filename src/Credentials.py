@@ -10,7 +10,7 @@ from googleapiclient.discovery import build
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
 
-def get_credentials():
+def _get_credentials() -> object:
     """
     Load the required credentials to access the google drive API
     """
@@ -40,7 +40,7 @@ def get_drive_service() -> object or None:
     Acquire the required credentials using the function,
     and build the google drive service resource.
     """
-    credentials = get_credentials()
+    credentials = _get_credentials()
     if credentials is None:
         print("Error. unable to acquire credentials.")
         return None
