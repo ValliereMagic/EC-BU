@@ -47,19 +47,19 @@ class ECBUMediaUpload(MediaUpload):
         self._chunk_size = chunk_size
         self._resumable = resumable
 
-    def chunksize(self):
+    def chunksize(self) -> int:
         return self._chunk_size
 
-    def mimetype(self):
+    def mimetype(self) -> str:
         return self._mimetype
 
-    def size(self):
+    def size(self) -> int:
         return (self._end_index - self._begin_index)
 
-    def resumable(self):
+    def resumable(self) -> bool:
         return self._resumable
 
-    def getbytes(self, begin: int, length: int):
+    def getbytes(self, begin: int, length: int) -> bytes:
         """
         Move to the beginning of this offset into our file
         by calculating with the begin offset,
@@ -75,7 +75,7 @@ class ECBUMediaUpload(MediaUpload):
             length = (self._end_index - read_start_index)
         return self._file_descriptor.read(length)
 
-    def has_stream(self):
+    def has_stream(self) -> bool:
         # We don't want it to use this interface. We want it to
         # use getbytes
         return False

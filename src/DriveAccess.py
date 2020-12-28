@@ -32,7 +32,7 @@ class DriveChunks(object):
         self._chunk_changes_cache = None
 
     @staticmethod
-    def _chunk_name_to_num(chunk_name: str):
+    def _chunk_name_to_num(chunk_name: str) -> int:
         """
         Remove everything from the chunk_name up to and
         including the '.', then convert it to an integer.
@@ -41,7 +41,7 @@ class DriveChunks(object):
         return int(re.sub(r'^(.*)\.', '', chunk_name))
 
     @staticmethod
-    def _chunk_id_response_compare(item: dict):
+    def _chunk_id_response_compare(item: dict) -> int:
         """
         Key function for sorting responses of
         files within a backup folder.
