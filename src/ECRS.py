@@ -71,9 +71,10 @@ def begin_file_restore(service, backup_folder_name: str, local_file_name: str,
     if not chunk_information:
         return False
     # Open up the local file
-    with os.fdopen(os.open(local_file_name, os.O_RDWR | os.O_CREAT), "r+b") as local_file:
+    with os.fdopen(os.open(local_file_name, os.O_RDWR | os.O_CREAT), "rb+") as local_file:
         # Find out how big the local file is
-        file_size: int = local_file.tell()
+        file_stats: os.stat_result = os.fstat(local_file.fileno())
+        file_size: int = file_stats.st_size
         # Go through each chunk, tallying how many bytes we already have
         # as we go.
         bytes_downloaded: int = 0

@@ -1,0 +1,2 @@
+head -c 40M < /dev/urandom > ./test_file
+echo 'a' | dd of=./test/test_file_restore bs=1 seek=$((0x999)) conv=notrunc
